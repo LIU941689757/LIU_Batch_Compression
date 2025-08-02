@@ -165,7 +165,7 @@ namespace LIU_Batch_Compression
         /// </summary>
         private void label1_Click(object sender, EventArgs e)
         {
-
+             
         }
     }
 }
