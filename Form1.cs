@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
@@ -13,119 +14,158 @@ namespace LIU_Batch_Compression
             InitializeComponent();
         }
 
-        // 按钮点击事件，开始处理压缩任务
+        /// <summary>
+        /// 按钮点击事件：开始批量拷贝PCsetup并调用ch.bat打包
+        /// </summary>
         private async void button3_Click(object sender, EventArgs e)
         {
-            // 获取用户输入的待压缩文件夹路径和目标src路径
-            string toolPath = textBox1.Text.Trim();
-            string srcPath = textBox2.Text.Trim();
-            // ch.bat 路径，假设跟 src 文件夹同级
-            string chBatPath = Path.Combine(Path.GetDirectoryName(srcPath) ?? "", "ch.bat");
+            // 获取用户输入的路径
+            string toolPath = textBox1.Text.Trim();    // 待压缩文件夹根目录
+            string srcPath = textBox2.Text.Trim();     // 目标src目录
+            string chBatPath = Path.Combine(Path.GetDirectoryName(srcPath) ?? "", "ch.bat"); // ch.bat脚本完整路径
 
-            // 路径检查：待压缩文件夹必须存在
-            if (!Directory.Exists(toolPath))
+            // 检查各路径和批处理脚本是否存在
+            if (!Directory.Exists(toolPath) || !Directory.Exists(srcPath) || !File.Exists(chBatPath))
             {
-                MessageBox.Show("待压缩文件夹路径不存在");
-                return;
-            }
-            // 目标 src 路径必须存在
-            if (!Directory.Exists(srcPath))
-            {
-                MessageBox.Show("目标src路径不存在");
-                return;
-            }
-            // ch.bat 必须存在
-            if (!File.Exists(chBatPath))
-            {
-                MessageBox.Show($"找不到ch.bat，路径：{chBatPath}");
+                MessageBox.Show("路径或ch.bat不存在");
                 return;
             }
 
-            // 禁用按钮避免重复点击
-            button3.Enabled = false;
+            button3.Enabled = false;           // 禁用按钮防止重复点击
+            progressBar1.Value = 0;            // 进度条重置
+            var folders = Directory.GetDirectories(toolPath); // 获取所有待处理子文件夹
+            progressBar1.Maximum = folders.Length > 0 ? folders.Length : 1; // 设置进度条最大值
+            List<string> failedList = new List<string>(); // 记录失败的文件夹
 
-            // 异步执行，防止界面卡顿
-            await Task.Run(() =>
+            // 开启后台任务处理所有子文件夹
+            await Task.Run(() => BatchProcessAllFolders(folders, srcPath, chBatPath, failedList));
+
+            button3.Enabled = true;                    // 恢复按钮
+            progressBar1.Value = progressBar1.Maximum; // 进度条满格
+            MessageBox.Show("全部处理完成");           // 弹窗提示
+
+            // 如果有失败的文件夹，统一弹窗显示
+            if (failedList.Count > 0)
             {
-                // 遍历待压缩文件夹下的所有子文件夹
-                var dirs = Directory.GetDirectories(toolPath);
-                for (int i = 0; i < dirs.Length; i++)
-                {
-                    var folder = dirs[i];
-                    var folderName = Path.GetFileName(folder);
-                    // 每个子文件夹下必须有PCsetup文件夹
-                    var pcsetupSource = Path.Combine(folder, "PCsetup");
-                    if (!Directory.Exists(pcsetupSource))
-                        continue; // 没有PCsetup，跳过
+                string msg = "以下文件夹处理失败：\n" + string.Join("\n", failedList);
+                MessageBox.Show(msg);
+            }
 
-                    // 目标路径：src下的PCsetup
-                    var pcsetupDest = Path.Combine(srcPath, "PCsetup");
-
-                    // 删除旧的PCsetup文件夹（如果存在）
-                    DeleteIfExists(pcsetupDest);
-                    // 复制新的PCsetup文件夹
-                    CopyDirectory(pcsetupSource, pcsetupDest);
-
-                    // 调用ch.bat压缩，参数是待压缩文件夹名
-                    int exitCode = RunChBat(chBatPath, folderName);
-                    if (exitCode != 0)
-                        break; // 出错则终止循环
-                }
-            });
-
-            // 任务完成，恢复按钮可用
-            button3.Enabled = true;
-            // 弹窗提示完成
-            MessageBox.Show("全部处理完成");
-
-            // 打开src路径同级目录下的rels文件夹
+            // 打开src目录同级的rels文件夹
             string relsPath = Path.Combine(Path.GetDirectoryName(srcPath) ?? "", "rels");
             Process.Start("explorer.exe", relsPath);
         }
 
-        // 删除文件夹（及其内容）如果存在
-        static void DeleteIfExists(string path)
+        /// <summary>
+        /// 批量处理所有子文件夹，按顺序逐一处理
+        /// </summary>
+        /// <param name="folders">待处理文件夹路径数组</param>
+        /// <param name="srcPath">目标src目录</param>
+        /// <param name="chBatPath">ch.bat脚本路径</param>
+        /// <param name="failedList">记录处理失败的目录</param>
+        private void BatchProcessAllFolders(string[] folders, string srcPath, string chBatPath, List<string> failedList)
         {
-            if (Directory.Exists(path))
-                Directory.Delete(path, true);
-        }
-
-        // 递归复制目录及文件
-        static void CopyDirectory(string source, string target)
-        {
-            Directory.CreateDirectory(target);
-
-            var files = Directory.GetFiles(source);
-            for (int i = 0; i < files.Length; i++)
+            for (int i = 0; i < folders.Length; i++)
             {
-                var destFile = Path.Combine(target, Path.GetFileName(files[i]));
-                File.Copy(files[i], destFile, true);
-            }
+                // 顺序处理每一个子目录
+                bool ok = ProcessSingleFolder(folders[i], srcPath, chBatPath);
 
-            var dirs = Directory.GetDirectories(source);
-            for (int i = 0; i < dirs.Length; i++)
-            {
-                var destDir = Path.Combine(target, Path.GetFileName(dirs[i]));
-                CopyDirectory(dirs[i], destDir);
+                // 进度条增加，Invoke保证线程安全
+                this.Invoke(new Action(() => progressBar1.Value = i + 1));
+
+                // 如果失败则记录
+                if (!ok) failedList.Add(folders[i]);
             }
         }
 
-        // 调用 ch.bat 进行压缩，参数是文件夹名
-        static int RunChBat(string chBatPath, string param)
+        /// <summary>
+        /// 处理单个子文件夹：拷贝PCsetup并调用批处理打包
+        /// </summary>
+        /// <param name="folder">当前待处理子目录</param>
+        /// <param name="srcPath">目标src目录</param>
+        /// <param name="chBatPath">ch.bat脚本路径</param>
+        /// <returns>处理成功返回true，失败返回false</returns>
+        private bool ProcessSingleFolder(string folder, string srcPath, string chBatPath)
         {
-            var psi = new ProcessStartInfo
+            var pcsetupSource = Path.Combine(folder, "PCsetup"); // 源PCsetup目录
+            var pcsetupDest = Path.Combine(srcPath, "PCsetup");  // 目标PCsetup目录
+
+            // 如果没有PCsetup目录，直接跳过
+            if (!Directory.Exists(pcsetupSource)) return true;
+
+            try
             {
-                FileName = "cmd.exe",
-                Arguments = $"/c \"\"{chBatPath}\" \"{param}\"\"",
+                // 删除目标PCsetup（如果已存在）
+                if (Directory.Exists(pcsetupDest))
+                    Directory.Delete(pcsetupDest, true);
+
+                // 递归复制PCsetup目录
+                CopyDirectory(pcsetupSource, pcsetupDest);
+
+                // 调用ch.bat批处理进行打包，参数为当前子文件夹名
+                int exitCode = RunChBat(chBatPath, Path.GetFileName(folder));
+                if (exitCode != 0)
+                {
+                    // 批处理失败，弹窗提示
+                    this.Invoke(new Action(() =>
+                    {
+                        MessageBox.Show($"调用批处理失败，目录：{folder}，退出码：{exitCode}");
+                    }));
+                    return false;
+                }
+                return true; // 成功
+            }
+            catch (Exception ex)
+            {
+                // 出现异常，弹窗提示
+                this.Invoke(new Action(() =>
+                {
+                    MessageBox.Show($"处理目录失败: {folder}\n{ex.Message}");
+                }));
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 递归复制目录及其所有内容
+        /// </summary>
+        /// <param name="source">源目录路径</param>
+        /// <param name="target">目标目录路径</param>
+        private void CopyDirectory(string source, string target)
+        {
+            Directory.CreateDirectory(target); // 创建目标目录
+            // 复制所有文件
+            foreach (var file in Directory.GetFiles(source))
+                File.Copy(file, Path.Combine(target, Path.GetFileName(file)), true);
+            // 递归复制所有子目录
+            foreach (var dir in Directory.GetDirectories(source))
+                CopyDirectory(dir, Path.Combine(target, Path.GetFileName(dir)));
+        }
+
+        /// <summary>
+        /// 执行ch.bat批处理脚本
+        /// </summary>
+        /// <param name="chBatPath">ch.bat脚本完整路径</param>
+        /// <param name="param">参数（当前子目录名）</param>
+        /// <returns>脚本的退出码（0为成功）</returns>
+        private int RunChBat(string chBatPath, string param)
+        {
+            var psi = new ProcessStartInfo("cmd.exe", $"/c \"\"{chBatPath}\" \"{param}\"\"")
+            {
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            using var proc = Process.Start(psi);
+            proc.WaitForExit();
+            return proc.ExitCode;
+        }
 
-            using (var proc = Process.Start(psi))
-            {
-                proc.WaitForExit();
-                return proc.ExitCode;
-            }
+        /// <summary>
+        /// （保留未用，可删除）Label点击事件（自动生成）
+        /// </summary>
+        private void label1_Click(object sender, EventArgs e)
+        {
+
         }
     }
 }
