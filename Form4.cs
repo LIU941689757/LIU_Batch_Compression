@@ -70,6 +70,9 @@ namespace LIU_Batch_Compression
             MessageBox.Show("全部解压完成！");
         }
 
+        private void Form4_Load(object sender, EventArgs e)
+        {
 
+        }
     }
 }

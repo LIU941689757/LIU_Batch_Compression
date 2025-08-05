@@ -39,11 +39,11 @@ namespace LIU_Batch_Compression
                    - 调用 ch.bat 并传入子文件夹名作为参数
                    - 显示进度和错误信息
 
-                5. 执行完成后会自动打开 rels 目录。
-"
+                5. 执行完成后会自动打开 rels 目录。"
             };
 
             this.Controls.Add(textBox);
+            textBox.TabStop = false; // 禁止 Tab 键切换焦点
         }
     }
 }

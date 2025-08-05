@@ -123,6 +123,7 @@
             Controls.Add(textBox1);
             MinimizeBox = false;
             Name = "Form2";
+            StartPosition = FormStartPosition.CenterScreen;
             Text = "Form2";
             ResumeLayout(false);
             PerformLayout();

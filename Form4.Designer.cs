@@ -92,7 +92,9 @@
             Controls.Add(label1);
             MinimizeBox = false;
             Name = "Form4";
+            StartPosition = FormStartPosition.CenterScreen;
             Text = "Form4";
+            Load += Form4_Load;
             ResumeLayout(false);
             PerformLayout();
         }
