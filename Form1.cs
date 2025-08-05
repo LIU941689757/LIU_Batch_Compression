@@ -150,15 +150,19 @@ namespace LIU_Batch_Compression
         /// <returns>脚本的退出码（0为成功）</returns>
         private int RunChBat(string chBatPath, string param)
         {
-            var psi = new ProcessStartInfo("cmd.exe", $"/c \"\"{chBatPath}\" \"{param}\"\"")
+            ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", $"/c \"\"{chBatPath}\" \"{param}\"\"")
             {
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
-            using var proc = Process.Start(psi);
+
+            Process proc = Process.Start(psi);
             proc.WaitForExit();
-            return proc.ExitCode;
+            int exitCode = proc.ExitCode;
+            proc.Dispose();
+            return exitCode;
         }
+
 
         /// <summary>
         /// （保留未用，可删除）Label点击事件（自动生成）
