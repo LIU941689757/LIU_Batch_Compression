@@ -166,19 +166,43 @@ namespace LIU_Batch_Compression
         /// <param name="chBatPath">ch.bat脚本完整路径</param>
         /// <param name="param">参数（当前子目录名）</param>
         /// <returns>脚本的退出码（0为成功）</returns>
+        //private int RunChBat(string chBatPath, string param)
+        //{
+        //    ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", $"/c \"\"{chBatPath}\" \"{param}\"\"")
+        //    {
+        //        UseShellExecute = false,
+        //        CreateNoWindow = true
+        //    };
+
+        //    Process proc = Process.Start(psi);
+        //    proc.WaitForExit();
+        //    int exitCode = proc.ExitCode;
+        //    proc.Dispose();
+        //    return exitCode;
+        //}
         private int RunChBat(string chBatPath, string param)
         {
-            ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", $"/c \"\"{chBatPath}\" \"{param}\"\"")
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+            // 用系统 cmd 执行；/d 关 AutoRun，/s 正确处理引号，/c 执行后退出
+            System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo();
+            psi.FileName = System.Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
+            psi.Arguments = string.IsNullOrWhiteSpace(param)
+                ? "/d /s /c \"\"" + chBatPath + "\"\""
+                : "/d /s /c \"\"" + chBatPath + "\" " + param + "\"";
+            psi.UseShellExecute = false;
+            psi.CreateNoWindow = true;
 
-            Process proc = Process.Start(psi);
-            proc.WaitForExit();
-            int exitCode = proc.ExitCode;
-            proc.Dispose();
-            return exitCode;
+            // 以 bat 所在目录为工作目录，避免相对路径失效
+            string wd = System.IO.Path.GetDirectoryName(chBatPath);
+            if (!string.IsNullOrEmpty(wd)) psi.WorkingDirectory = wd;
+
+            using (System.Diagnostics.Process proc = System.Diagnostics.Process.Start(psi))
+            {
+                proc.WaitForExit();
+                return proc.ExitCode;
+            }
         }
+
+
     }
+
 }
